@@ -1,33 +1,26 @@
 const fs = require('fs')
-const qrcode = require('qrcode-terminal')
+require('dotenv').config();
+
 const port = 3000
 const  mongoose  = require('mongoose');
 
-
-uri ='mongodb+srv://ernierous:cuantum47@cluster0.3m7828i.mongodb.net/clientes?retryWrites=true&w=majority'
-
-
+uri =process.env.MONGODB
 
 mongoose.connect(uri, async (err,)=>{
    //error-first callback
    if(err){
        console.log('No se pudo conectar a mi base de datos')
    }else{
-       console.log('se conecto a base de datos '+port)
-      
+       console.log('se conecto a base de datos '+port)    
    }
 });
-// Define a schema for your data
-const dataSchema = new mongoose.Schema({
-    field1: String,
-    field2: String
-  });
 
-const Data = mongoose.model('conversaciones', dataSchema);
+const Cotizacion = require('../src/models/cotizacion')
 
-const {herrajes} = require('./core/precios')
 
-const {composicion_producto } = require('./core/funciones/descomp_sub.js')
+const {herrajes} = require('../core/precios')
+
+const {composicion_producto } = require('../core/funciones/descomp_sub.js')
 
 const {Client, Location, List, Buttons, LocalAuth, } = require('whatsapp-web.js')
 const Chat = require('whatsapp-web.js/src/structures/Chat');
@@ -44,72 +37,27 @@ if(fs.existsSync(SESSION_FILE_PATH)){
 }
 const loscuates = new Client({
     authStrategy: new LocalAuth(),
-    session: sessionData,
+    
 })
 
 loscuates.initialize();
 
-loscuates.on('qr', qr=>{
-    qrcode.generate(qr,{small: true});
+loscuates.on('disconnected', ()=>{
+    loscuates.initialize();  
 })
 
-loscuates.on('ready', () =>{
-    console.log('El cliente esta listo');
+loscuates.on('auth_failure', msg => {
+    // Fired if session restore was unsuccessful
+    console.error('AUTHENTICATION FAILURE', msg);
+});
 
-    let chatId = country_code + number + "@c.us";
+loscuates.on('ready', () => {
+    console.log('READY');
+});
 
-    loscuates.sendMessage(chatId, msg)
-                    .then(response =>{
-                        if(response.id.fromMe){
-                            console.log('El mensaje fue enviado')
-                        }
-                    })
-})
-
-loscuates.on('authenticated', session => {
-    sessionData = session;
-})
-
-loscuates.on('auth_failure', msg =>{
-    console.error('hubo un fallo en la autenticacion')
-})
-
-const { MessageMedia } = require('whatsapp-web.js');
-
-
-let msglist = []
-
-
-var peliculaesmeril= 100
-var pelicureflecta = 100
-var pelicupolarizada = 100
-
-function sendDataToDB(err, msg) {
-    if (err) {
-      console.log(err);
-    } else {
-      // Create a new document using the Data model
-      const newData = new Data({
-        field1: msg.body,
-        field2: msg.from
-      });
-  
-      // Save the document to the database
-      newData.save((error) => {
-        if (error) {
-          console.log(error);
-        } else {
-          console.log('Data saved to database');
-        }
-      });
-    }
-  }
-
-loscuates.on('message', async msg=>{
-//especificaciones de vidrio por default
-
-
-let producto
+loscuates.on('message', async msg =>{
+    console.log('MESSAGE RECEIVED:', msg.body);
+    let producto
 let productos = []
 let gastos_unitarios = []; 
 let submsg = [];
@@ -123,6 +71,14 @@ let porcganacia=2.5;
 
     submsg = msg.body.split(/, /)
     console.log(submsg)
+if(/_id:/.test(msg.body)){
+    let id = msg.body.substring(msg.body.search(/id:/)+5,msg.body.search(/¿aceptada?/)-3)
+    console.log(id)
+    let status = msg.body.substring(msg.body.search(/¿aceptada/)+12, msg.body.search(/¿aceptada/)+14)
+    console.log(status)
+    loscuates.sendMessage(msg.from, statusCotizacion(id, status))
+
+}
     
 for(i=0;i<submsg.length;i++){
     let cantidad = 1;
@@ -130,10 +86,7 @@ for(i=0;i<submsg.length;i++){
     let medidas;
     
     if(/\d+.?\d? x \d+.?\d?/.test(submsg[i])){
-        //define el grosor del vidrio
-       
 
-        
 
         alto=parseFloat(submsg[i].substring(submsg[i].search(/\d+.?\d? x \d+.?\d?/),submsg[i].search(/ x /)))
         console.log('el alto es de: '+alto)
@@ -154,12 +107,8 @@ for(i=0;i<submsg.length;i++){
             loscuates.sendMessage(msg.from, 'Falto especificar si es corredizo o fijo el mosquitero ')
         }
         
-    
-    
         //añadir gastos unitarios a lista de costos de materiales
     gastos_unitarios.push(cantidad*composicion_producto(submsg[i], alto, ancho))
-    
-
     
 }  }
 //sumar gastos unitarios
@@ -192,7 +141,22 @@ console.log(gasto)
     }
 
     preciocliente = gasto*porcganacia
-    console.log(`precio al cliente es ${preciocliente}`)
+
+if(/\d+.?\d? x \d+.?\d?/.test(msg.body)){
+        const cotizacion = new Cotizacion({
+        cliente: msg.from,
+        descripcion: msg.body,
+        gasto: gasto,
+        por_Ganancia: porcganacia,
+        precio:preciocliente,
+        })
+
+cotizacion.save((err, document)=>{
+    if(err)console.log(err);
+    console.log(document)
+})
+
+    
    
     
     if(/otsoc/i.test(msg.body)&&((/vidrio/i.test(msg.body)||/espejo/i.test(msg.body)||/luna/i.test(msg.body))&&/\d+.?\d? x \d+.?\d?/.test(msg.body)
@@ -204,9 +168,12 @@ console.log(gasto)
     if(/\d+.?\d? x \d+.?\d?/.test(msg.body)){
 
         loscuates.sendMessage(msg.from, `El precio de este producto es: $${preciocliente.toFixed(0)}`)
-        loscuates.sendMessage(msg.from, "¿El cliente acepta la cotizacion?")
+        loscuates.sendMessage(msg.from, `_id: ${(JSON.stringify(cotizacion._id))}, ¿aceptada?: `)
+        
         
     }
+
+}
     else if((/cuanto/i.test(msg.body)||/cotizar/i.test(msg.body))&&/vidrio/.test(msg.body)&&!(/6mm/.test(msg.body)||/3mm/.test(msg.body)||/4mm/.test(msg.body))
     &&/\d+.?\d? x \d+.?\d?/.test(msg.body)&&(/instalado/.test(msg.body)||/sin instalacion/.test(msg.body)||/al corte/.test(msg.body))){
 
@@ -249,162 +216,6 @@ console.log(gasto)
 
 })
 
-/*
-
-loscuates.on('message', async msg => {
-    console.log('MESSAGE RECEIVED', msg);
-
-    if (msg.body === '!ping reply') {
-        // Send a new message as a reply to the current one
-        msg.reply('pong');
-
-    } else if (msg.body === '!ping') {
-        // Send a new message to the same chat
-        loscuates.sendMessage(msg.from, 'pong');
-
-    } else if (msg.body.startsWith('!sendto ')) {
-        // Direct send a new message to specific id
-        let number = msg.body.split(' ')[1];
-        let messageIndex = msg.body.indexOf(number) + number.length;
-        let message = msg.body.slice(messageIndex, msg.body.length);
-        number = number.includes('@c.us') ? number : `${number}@c.us`;
-        let chat = await msg.getChat();
-        chat.sendSeen();
-        loscuates.sendMessage(number, message);
-
-    } else if (msg.body.startsWith('!subject ')) {
-        // Change the group subject
-        let chat = await msg.getChat();
-        if (chat.isGroup) {
-            let newSubject = msg.body.slice(9);
-            chat.setSubject(newSubject);
-        } else {
-            msg.reply('This command can only be used in a group!');
-        }
-    } else if (msg.body.startsWith('!echo ')) {
-        // Replies with the same message
-        msg.reply(msg.body.slice(6));
-    } else if (msg.body.startsWith('!desc ')) {
-        // Change the group description
-        let chat = await msg.getChat();
-        if (chat.isGroup) {
-            let newDescription = msg.body.slice(6);
-            chat.setDescription(newDescription);
-        } else {
-            msg.reply('This command can only be used in a group!');
-        }
-    } else if (msg.body === '!leave') {
-        // Leave the group
-        let chat = await msg.getChat();
-        if (chat.isGroup) {
-            chat.leave();
-        } else {
-            msg.reply('This command can only be used in a group!');
-        }
-    } else if (msg.body.startsWith('!join ')) {
-        const inviteCode = msg.body.split(' ')[1];
-        try {
-            await loscuates.acceptInvite(inviteCode);
-            msg.reply('Joined the group!');
-        } catch (e) {
-            msg.reply('That invite code seems to be invalid.');
-        }
-    } else if (msg.body === '!groupinfo') {
-        let chat = await msg.getChat();
-        if (chat.isGroup) {
-            msg.reply(`
-                *Group Details*
-                Name: ${chat.name}
-                Description: ${chat.description}
-                Created At: ${chat.createdAt.toString()}
-                Created By: ${chat.owner.user}
-                Participant count: ${chat.participants.length}
-            `);
-        } else {
-            msg.reply('This command can only be used in a group!');
-        }
-    } else if (msg.body === '!chats') {
-        const chats = await loscuates.getChats();
-        loscuates.sendMessage(msg.from, `The bot has ${chats.length} chats open.`);
-    } else if (msg.body === '!info') {
-        let info = loscuates.info;
-        loscuates.sendMessage(msg.from, `
-            *Connection info*
-            User name: ${info.pushname}
-            My number: ${info.wid.user}
-            Platform: ${info.platform}
-        `);
-    } else if (msg.body === '!mediainfo' && msg.hasMedia) {
-        const attachmentData = await msg.downloadMedia();
-        msg.reply(`
-            *Media info*
-            MimeType: ${attachmentData.mimetype}
-            Filename: ${attachmentData.filename}
-            Data (length): ${attachmentData.data.length}
-        `);
-    } else if (msg.body === '!quoteinfo' && msg.hasQuotedMsg) {
-        const quotedMsg = await msg.getQuotedMessage();
-
-        quotedMsg.reply(`
-            ID: ${quotedMsg.id._serialized}
-            Type: ${quotedMsg.type}
-            Author: ${quotedMsg.author || quotedMsg.from}
-            Timestamp: ${quotedMsg.timestamp}
-            Has Media? ${quotedMsg.hasMedia}
-        `);
-    } else if (msg.body === '!resendmedia' && msg.hasQuotedMsg) {
-        const quotedMsg = await msg.getQuotedMessage();
-        if (quotedMsg.hasMedia) {
-            const attachmentData = await quotedMsg.downloadMedia();
-            loscuates.sendMessage(msg.from, attachmentData, { caption: 'Here\'s your requested media.' });
-        }
-    } else if (msg.body === '!location') {
-        msg.reply(new Location(37.422, -122.084, 'Googleplex\nGoogle Headquarters'));
-    } else if (msg.location) {
-        msg.reply(msg.location);
-    } else if (msg.body.startsWith('!status ')) {
-        const newStatus = msg.body.split(' ')[1];
-        await loscuates.setStatus(newStatus);
-        msg.reply(`Status was updated to *${newStatus}*`);
-    } else if (msg.body === '!mention') {
-        const contact = await msg.getContact();
-        const chat = await msg.getChat();
-        chat.sendMessage(`Hi @${contact.number}!`, {
-            mentions: [contact]
-        });
-    } else if (msg.body === '!delete') {
-        if (msg.hasQuotedMsg) {
-            const quotedMsg = await msg.getQuotedMessage();
-            if (quotedMsg.fromMe) {
-                quotedMsg.delete(true);
-            } else {
-                msg.reply('I can only delete my own messages');
-            }
-        }
-    } else if (msg.body === '!pin') {
-        const chat = await msg.getChat();
-        await chat.pin();
-    } else if (msg.body === '!archive') {
-        const chat = await msg.getChat();
-        await chat.archive();
-   
-    
-
-    
-    } else if (msg.body === '!jumpto') {
-        if (msg.hasQuotedMsg) {
-            const quotedMsg = await msg.getQuotedMessage();
-            loscuates.interface.openChatWindowAt(quotedMsg.id._serialized);
-        }
-    } else if (msg.body === '!buttons') {
-        let button = new Buttons('Button body',[{body:'bt1'},{body:'bt2'},{body:'bt3'}],'title','footer');
-        loscuates.sendMessage(msg.from, button);
-   
-    } else if (msg.body === '!reaction') {
-        msg.react('👍');
-    }
-});
-
 loscuates.on('message_create', (msg) => {
     // Fired on all message creations, including your own
     if (msg.fromMe) {
@@ -424,9 +235,7 @@ loscuates.on('message_revoke_me', async (msg) => {
     // Fired whenever a message is only deleted in your own view.
     console.log(msg.body); // message before it was deleted.
 });
-*/
 
-/*
 loscuates.on('message_ack', (msg, ack) => {
     /*
         == ACK VALUES ==
@@ -438,6 +247,10 @@ loscuates.on('message_ack', (msg, ack) => {
         ACK_PLAYED: 4
     */
 
+    if(ack == 3) {
+        // The message was read
+    }
+});
 
 loscuates.on('group_join', (notification) => {
     // User has joined or been added to the group.
@@ -457,10 +270,20 @@ loscuates.on('group_update', (notification) => {
 });
 
 loscuates.on('change_state', state => {
-    console.log('CHANGE STATE', state );
+    console.log('CHANGE STATE', state )
+});
+
+// Change to false if you don't want to reject incoming calls
+let rejectCalls = true;
+
+loscuates.on('call', async (call) => {
+    console.log('Call received, rejecting. GOTO Line 261 to disable', call);
+    if (rejectCalls) await call.reject();
+    await loscuates.sendMessage(call.from, `[${call.fromMe ? 'Outgoing' : 'Incoming'}] Phone call from ${call.from}, type ${call.isGroup ? 'group' : ''} ${call.isVideo ? 'video' : 'audio'} call. ${rejectCalls ? 'This call was automatically rejected by the script.' : ''}`);
 });
 
 loscuates.on('disconnected', (reason) => {
+    loscuates.initialize();
     console.log('Client was logged out', reason);
 });
 
