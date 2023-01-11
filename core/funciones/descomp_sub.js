@@ -1,5 +1,5 @@
 const {materiales} =require('../precios');
-const { cot_vidrio, cot_mosquitero, cot_CorredizaNacional, cot_plegadiza,cot_cancelbaño, cot_Domo} = require('./cotizador');
+const { cot_vidrio, cot_mosquitero, cot_CorredizaNacional, cot_plegadiza,cot_cancelbaño, cot_Domo, cot_fija} = require('./cotizador');
 
 
 const composicion_producto =(body, alto, ancho)=>{
@@ -7,7 +7,7 @@ let tipo_vidrio = 'claro';
 let grosor_vidrio= '6mm';
 let proceso_vidrio='crudo';
 let lamina='plastico'
-let tubo='2x1in'
+let tubo='2x1'
 
 let divi=2;
 
@@ -128,15 +128,19 @@ console.log(body)
         }
         return cot_Domo(coloralum, alto, ancho, lamina, tubo, g_vidrio)
     }
+    else if(/fija/i.test(body)){
+
+        console.log('entro a fija en descomp')
+        g_vidrio=cot_vidrio(tipo_vidrio, grosor_vidrio, proceso_vidrio, alto-2, ancho-2, pelicula)
+        return cot_fija(coloralum, alto, ancho, in_vent_nacional, divi, g_vidrio )
+    }
     else{
         return cot_vidrio(tipo_vidrio, grosor_vidrio, proceso_vidrio, alto, ancho, pelicula)
     }
 
-
 }
 
 module.exports = {composicion_producto}
-
 
 
 
